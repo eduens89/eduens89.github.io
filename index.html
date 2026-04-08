@@ -106,7 +106,15 @@
                         if (!res.ok) throw new Error("Impossible de charger le catalogue.");
                         return res.text();
                     })
-                    .then(text => { setItems(parseCSV(text)); setLoading(false); })
+                    .then(text => {
+                        const data = parseCSV(text).sort((a, b) => {
+                            const da = new Date(a.DateCreation || 0);
+                            const db = new Date(b.DateCreation || 0);
+                            return db - da;
+                        });
+                        setItems(data);
+                        setLoading(false);
+                    })
                     .catch(err => { setError(err.message); setLoading(false); });
             }, []);
 
