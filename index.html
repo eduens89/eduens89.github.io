@@ -43,12 +43,24 @@
 
         // Fonction pour gérer les URLs d'images (Google Drive ou directes)
         function getPhotoUrl(val) {
-            if (!val) return "https://placehold.co/400x300?text=Photo+à+venir";
-            val = val.trim().replace(/^"|"$/g, ""); // Nettoyage guillemets
-            if (val.startsWith("http")) return val;
-            // Si c'est un ID Google Drive
-            return `https://drive.google.com/thumbnail?id=${val}&sz=w600`;
+    if (!val) return "https://placehold.co/400x300?text=Photo+à+venir";
+    val = val.trim().replace(/^"|"$/g, ""); 
+
+    // Si c'est déjà une URL directe (ex: imgur, site externe)
+    if (val.startsWith("http") && !val.includes("drive.google.com")) return val;
+
+    // Si c'est un lien Google Drive complet
+    if (val.includes("drive.google.com")) {
+        // On cherche l'ID dans l'URL (entre /d/ et /view ou après id=)
+        const parts = val.match(/\/d\/([^\/]+)/) || val.match(/id=([^&]+)/);
+        if (parts && parts[1]) {
+            return `https://drive.google.com/thumbnail?id=${parts[1]}&sz=w600`;
         }
+    }
+
+    // Si c'est juste l'ID brut (ancien système)
+    return `https://drive.google.com/thumbnail?id=${val}&sz=w600`;
+}
 
         // Fonction de parsing robuste (gère les sauts de ligne dans les cellules)
         function parseCSV(text) {
