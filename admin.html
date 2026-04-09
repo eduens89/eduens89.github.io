@@ -54,13 +54,15 @@
         const { useState } = React;
 
         function AdminForm() {
+            // Ajout du champ password
             const [formData, setFormData] = useState({
-                titre: '', categorie: '', prix: '', dimensions: '', description: ''
+                titre: '', categorie: '', prix: '', dimensions: '', description: '', password: ''
             });
             const [image, setImage] = useState(null);
             const [preview, setPreview] = useState(null);
             const [dragActive, setDragActive] = useState(false);
             const [status, setStatus] = useState('idle');
+            const [errorMsg, setErrorMsg] = useState('Une erreur est survenue lors de l\'ajout.');
             
             const [isCustomCat, setIsCustomCat] = useState(false);
 
@@ -125,9 +127,14 @@
                     alert("N'oubliez pas d'ajouter une photo !");
                     return;
                 }
+                if (!formData.password) {
+                    alert("Veuillez entrer le mot de passe !");
+                    return;
+                }
                 
                 setStatus('loading');
 
+                // On intègre le mot de passe dans les données envoyées
                 const payload = {
                     imageContent: preview, 
                     imageName: image.name,
@@ -135,7 +142,8 @@
                     categorie: formData.categorie,
                     prix: formData.prix,
                     dimensions: formData.dimensions,
-                    description: formData.description
+                    description: formData.description,
+                    password: formData.password
                 };
 
                 try {
@@ -151,17 +159,20 @@
 
                     if (result.status === "success") {
                         setStatus('success');
-                        setFormData({ titre: '', categorie: '', prix: '', dimensions: '', description: '' });
+                        // On vide tout le formulaire
+                        setFormData({ titre: '', categorie: '', prix: '', dimensions: '', description: '', password: '' });
                         setImage(null);
                         setPreview(null);
                         setIsCustomCat(false);
                         setTimeout(() => setStatus('idle'), 4000);
                     } else {
                         console.error("Erreur serveur:", result);
+                        setErrorMsg(result.message || "Une erreur est survenue.");
                         setStatus('error');
                     }
                 } catch (err) {
                     console.error("Erreur réseau:", err);
+                    setErrorMsg("Erreur réseau, impossible de joindre le serveur.");
                     setStatus('error');
                 }
             };
@@ -244,11 +255,17 @@
                                     <textarea name="description" value={formData.description} onChange={handleInputChange} placeholder="Détails, état du meuble (ex: à rénover), petites anecdotes..."></textarea>
                                 </div>
 
+                                {/* --- CHAMP MOT DE PASSE --- */}
+                                <div className="input-group full-width" style={{ borderTop: '1px solid #ddd', paddingTop: '20px', marginTop: '10px' }}>
+                                    <label style={{color: '#c62828'}}>Mot de passe Admin *</label>
+                                    <input type="password" name="password" value={formData.password} onChange={handleInputChange} required placeholder="Mot de passe obligatoire pour valider" style={{borderColor: '#ffcdd2', background: '#fff5f5'}} />
+                                </div>
+
                                 <div className={`status-msg success ${status === 'success' ? 'show' : ''}`} style={{display: status === 'success' ? 'block' : 'none'}}>
                                     ✅ L'article a bien été ajouté au catalogue !
                                 </div>
                                 <div className={`status-msg error ${status === 'error' ? 'show' : ''}`} style={{display: status === 'error' ? 'block' : 'none'}}>
-                                    ❌ Une erreur est survenue lors de l'ajout.
+                                    ❌ {errorMsg}
                                 </div>
 
                                 <button type="submit" className="submit-btn" disabled={status === 'loading'}>
