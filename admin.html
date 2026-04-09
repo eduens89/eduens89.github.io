@@ -58,17 +58,13 @@
         const { useState } = React;
 
         function AdminForm() {
-            // État pour stocker les données du formulaire
             const [formData, setFormData] = useState({
                 titre: '', categorie: '', prix: '', dimensions: '', description: ''
             });
-            // État pour la photo
             const [image, setImage] = useState(null);
             const [preview, setPreview] = useState(null);
             const [dragActive, setDragActive] = useState(false);
-            
-            // État de l'envoi
-            const [status, setStatus] = useState('idle'); // idle, loading, success, error
+            const [status, setStatus] = useState('idle');
 
             const categoriesPredefinies = [
                 "", "Meubles salon", "Meubles chambre", "Meubles cuisine", "Meubles SDB", 
@@ -80,7 +76,6 @@
                 setFormData({ ...formData, [name]: value });
             };
 
-            // --- GESTION DU DRAG & DROP ---
             const handleDrag = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -110,14 +105,13 @@
                     return;
                 }
                 setImage(file);
-                // Créer l'aperçu de l'image
                 const reader = new FileReader();
                 reader.onload = (e) => setPreview(e.target.result);
                 reader.readAsDataURL(file);
             };
 
-            // --- SOUMISSION (Mock pour le moment) ---
-            const handleSubmit = (e) => {
+            // --- VRAIE SOUMISSION VERS GOOGLE ---
+            const handleSubmit = async (e) => {
                 e.preventDefault();
                 if (!preview) {
                     alert("N'oubliez pas d'ajouter une photo !");
@@ -126,21 +120,41 @@
                 
                 setStatus('loading');
 
-                // ICI on mettra plus tard le code qui envoie vers Google Apps Script
-                // Pour l'instant on simule un chargement de 2 secondes puis un succès
-                setTimeout(() => {
-                    console.log("Données prêtes à être envoyées :", formData);
-                    console.log("Image en Base64 (prête pour Drive) :", preview.substring(0, 50) + "...");
-                    
-                    setStatus('success');
-                    // On vide le formulaire
-                    setFormData({ titre: '', categorie: '', prix: '', dimensions: '', description: '' });
-                    setImage(null);
-                    setPreview(null);
-                    
-                    // On efface le message de succès après 4 secondes
-                    setTimeout(() => setStatus('idle'), 4000);
-                }, 2000);
+                const payload = {
+                    imageContent: preview, 
+                    imageName: image.name,
+                    titre: formData.titre,
+                    categorie: formData.categorie,
+                    prix: formData.prix,
+                    dimensions: formData.dimensions,
+                    description: formData.description
+                };
+
+                try {
+                    // ATTENTION : Colle ton URL de déploiement à la place du texte ci-dessous, en gardant les guillemets !
+                    const scriptURL = "https://script.google.com/macros/s/AKfycbyQhymHc2i_mr2vujFVIzaUxto8gIkxsl2D3MINKvnKPh19aPFPk8g1nBlJ5Ra1l0DzAQ/exec";
+
+                    const response = await fetch(scriptURL, {
+                        method: "POST",
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+
+                    if (result.status === "success") {
+                        setStatus('success');
+                        setFormData({ titre: '', categorie: '', prix: '', dimensions: '', description: '' });
+                        setImage(null);
+                        setPreview(null);
+                        setTimeout(() => setStatus('idle'), 4000);
+                    } else {
+                        console.error("Erreur serveur:", result);
+                        setStatus('error');
+                    }
+                } catch (err) {
+                    console.error("Erreur réseau:", err);
+                    setStatus('error');
+                }
             };
 
             return (
@@ -157,7 +171,6 @@
                             </div>
 
                             <div className="form-body">
-                                {/* Zone Drag & Drop (Prend toute la largeur) */}
                                 <div 
                                     className={`dropzone ${dragActive ? "active" : ""}`}
                                     onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
@@ -180,7 +193,6 @@
                                     )}
                                 </div>
 
-                                {/* Ligne 1 : Titre et Catégorie */}
                                 <div className="input-group">
                                     <label>Titre de l'article *</label>
                                     <input type="text" name="titre" value={formData.titre} onChange={handleInputChange} required placeholder="Ex: Table basse en chêne" />
@@ -195,7 +207,6 @@
                                     </select>
                                 </div>
 
-                                {/* Ligne 2 : Prix et Dimensions */}
                                 <div className="input-group">
                                     <label>Prix (€)</label>
                                     <input type="number" name="prix" value={formData.prix} onChange={handleInputChange} placeholder="Laisser vide pour Prix libre" min="0" />
@@ -205,13 +216,11 @@
                                     <input type="text" name="dimensions" value={formData.dimensions} onChange={handleInputChange} placeholder="Ex: L100 x P50 x H40 cm" />
                                 </div>
 
-                                {/* Description complète */}
                                 <div className="input-group full-width">
                                     <label>Description</label>
                                     <textarea name="description" value={formData.description} onChange={handleInputChange} placeholder="Détails, état du meuble (ex: à rénover), petites anecdotes..."></textarea>
                                 </div>
 
-                                {/* Messages de statut */}
                                 <div className={`status-msg success ${status === 'success' ? 'show' : ''}`} style={{display: status === 'success' ? 'block' : 'none'}}>
                                     ✅ L'article a bien été ajouté au catalogue !
                                 </div>
@@ -219,7 +228,6 @@
                                     ❌ Une erreur est survenue lors de l'ajout.
                                 </div>
 
-                                {/* Bouton Valider */}
                                 <button type="submit" className="submit-btn" disabled={status === 'loading'}>
                                     {status === 'loading' ? '⏳ Envoi en cours...' : 'Ajouter au catalogue'}
                                 </button>
