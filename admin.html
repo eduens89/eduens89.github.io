@@ -54,7 +54,6 @@
         const { useState } = React;
 
         function AdminForm() {
-            // Ajout du champ password
             const [formData, setFormData] = useState({
                 titre: '', categorie: '', prix: '', dimensions: '', description: '', password: ''
             });
@@ -66,10 +65,11 @@
             
             const [isCustomCat, setIsCustomCat] = useState(false);
 
-            const categoriesPredefinies = [
+            // NOUVEAU : On gère les catégories dans un état pour pouvoir en ajouter "en direct"
+            const [dynamicCategories, setDynamicCategories] = useState([
                 "Meubles salon", "Meubles chambre", "Meubles cuisine", "Meubles SDB", 
                 "Chaises", "Mobiliers enfant", "Décoration"
-            ];
+            ]);
 
             const handleInputChange = (e) => {
                 const { name, value } = e.target;
@@ -131,6 +131,12 @@
                     alert("Veuillez entrer le mot de passe !");
                     return;
                 }
+                
+                // --- NOUVEAU : Mémorisation de la nouvelle catégorie ---
+                if (isCustomCat && formData.categorie && !dynamicCategories.includes(formData.categorie)) {
+                    setDynamicCategories([...dynamicCategories, formData.categorie]);
+                }
+                // --------------------------------------------------------
                 
                 setStatus('loading');
 
