@@ -13,7 +13,6 @@
         body { background: var(--cream-dark); font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; color: var(--purple); }
         
         header { background: var(--purple); color: #fdf9ee; padding: 0.6rem 2rem; position: sticky; top: 0; z-index: 10; display: flex; justify-content: center; align-items: center; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        .logo-wrapper { display: flex; align-items: center; gap: 12px; }
         .logo-img { height: 90px; width: auto; }
         
         .nav-cats { background: var(--purple); overflow-x: auto; white-space: nowrap; padding: 10px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; gap: 10px; }
@@ -21,15 +20,15 @@
         .nav-cats button.active { background: var(--green); color: var(--purple); border-color: var(--green); font-weight: bold; }
 
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; padding: 2rem; max-width: 1200px; margin: 0 auto; }
-        .card { background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(33,13,65,0.12); transition: 0.3s; cursor: pointer; }
+        .card { background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(33,13,65,0.12); transition: 0.3s; cursor: pointer; display: flex; flex-direction: column; }
         .card:hover { transform: translateY(-8px); }
         .card-img { height: 210px; width: 100%; object-fit: cover; background: #eee; }
-        .card-content { padding: 20px; }
-        .price { font-size: 1.4rem; font-weight: 800; color: var(--purple); }
+        .card-content { padding: 20px; flex-grow: 1; }
+        .price { font-size: 1.4rem; font-weight: 800; color: var(--purple); margin-top: 10px; }
 
         .modal-overlay { position: fixed; inset: 0; background: rgba(33,13,65,0.85); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; backdrop-filter: blur(4px); }
         .modal { background: white; border-radius: 24px; max-width: 550px; width: 100%; max-height: 90vh; overflow-y: auto; position: relative; }
-        .close-btn { position: absolute; top: 15px; right: 15px; background: white; border-radius: 50%; border: none; font-size: 24px; cursor: pointer; width: 35px; height: 35px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        .close-btn { position: absolute; top: 15px; right: 15px; background: white; border-radius: 50%; border: none; font-size: 24px; cursor: pointer; width: 35px; height: 35px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 2; }
         
         footer { background: var(--purple); color: #fdf9ee; padding: 2rem; margin-top: 4rem; text-align: center; }
     </style>
@@ -41,44 +40,28 @@
 
         const SHEET_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vREXXW0wE12HS6P_2zK--2Rmmo9B6mTOjfecrdJHoR4xkwHYbtCqJCDvw0FbQMH7JrDNnF_-7msa_i7/pub?gid=0&single=true&output=csv";
 
-        // Fonction pour gérer les URLs d'images (Google Drive ou directes)
         function getPhotoUrl(val) {
-    if (!val) return "https://placehold.co/400x300?text=Photo+à+venir";
-    val = val.trim().replace(/^"|"$/g, ""); 
-
-    // Si c'est déjà une URL directe (ex: imgur, site externe)
-    if (val.startsWith("http") && !val.includes("drive.google.com")) return val;
-
-    // Si c'est un lien Google Drive complet
-    if (val.includes("drive.google.com")) {
-        // On cherche l'ID dans l'URL (entre /d/ et /view ou après id=)
-        const parts = val.match(/\/d\/([^\/]+)/) || val.match(/id=([^&]+)/);
-        if (parts && parts[1]) {
-            return `https://drive.google.com/thumbnail?id=${parts[1]}&sz=w600`;
+            if (!val) return "https://placehold.co/400x300?text=Photo+à+venir";
+            val = val.trim().replace(/^"|"$/g, ""); 
+            if (val.startsWith("http") && !val.includes("drive.google.com")) return val;
+            if (val.includes("drive.google.com")) {
+                const parts = val.match(/\/d\/([^\/]+)/) || val.match(/id=([^&]+)/);
+                if (parts && parts[1]) return `https://drive.google.com/thumbnail?id=${parts[1]}&sz=w600`;
+            }
+            return `https://drive.google.com/thumbnail?id=${val}&sz=w600`;
         }
-    }
 
-    // Si c'est juste l'ID brut (ancien système)
-    return `https://drive.google.com/thumbnail?id=${val}&sz=w600`;
-}
-
-        // Fonction de parsing robuste (gère les sauts de ligne dans les cellules)
         function parseCSV(text) {
             const rows = [];
             let currentRow = [];
             let currentCell = "";
             let inQuotes = false;
-
             for (let i = 0; i < text.length; i++) {
                 const char = text[i];
                 const nextChar = text[i + 1];
-
                 if (char === '"') {
-                    if (inQuotes && nextChar === '"') {
-                        currentCell += '"'; i++; 
-                    } else {
-                        inQuotes = !inQuotes;
-                    }
+                    if (inQuotes && nextChar === '"') { currentCell += '"'; i++; } 
+                    else { inQuotes = !inQuotes; }
                 } else if (char === ',' && !inQuotes) {
                     currentRow.push(currentCell.trim());
                     currentCell = "";
@@ -90,25 +73,18 @@
                         currentRow = [];
                         currentCell = "";
                     }
-                } else {
-                    currentCell += char;
-                }
+                } else { currentCell += char; }
             }
             if (currentRow.length > 0 || currentCell !== "") {
                 currentRow.push(currentCell.trim());
                 rows.push(currentRow);
             }
-
             if (rows.length < 2) return [];
-
-            // Nettoyage des entêtes (suppression du BOM éventuel)
             const headers = rows[0].map(h => h.replace(/^\ufeff/, "").replace(/^"|"$/g, "").trim());
-            
             return rows.slice(1).map((row, idx) => {
                 const obj = { _row: idx + 2 };
                 headers.forEach((h, i) => {
-                    let val = (row[i] || "").replace(/^"|"$/g, "").trim();
-                    obj[h] = val;
+                    obj[h] = (row[i] || "").replace(/^"|"$/g, "").trim();
                 });
                 obj._photoUrl = getPhotoUrl(obj["Photos"] || "");
                 return obj;
@@ -116,42 +92,33 @@
         }
 
         function App() {
-            const [items, setItems]       = useState([]);
-            const [loading, setLoading]   = useState(true);
-            const [error, setError]       = useState(null);
-            const [filter, setFilter]     = useState("Tout");
+            const [items, setItems] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+            const [filter, setFilter] = useState("Tout");
             const [selected, setSelected] = useState(null);
 
             useEffect(() => {
                 fetch(SHEET_CSV)
-                    .then(res => {
-                        if (!res.ok) throw new Error("Impossible de charger le catalogue.");
-                        return res.text();
-                    })
+                    .then(res => res.text())
                     .then(text => { 
                         let data = parseCSV(text);
-                        // TRI : On inverse pour avoir les derniers ajoutés en premier
+                        // Tri inverse pour avoir les derniers ajouts en haut
                         setItems(data.reverse()); 
                         setLoading(false); 
                     })
-                    .catch(err => { 
-                        setError(err.message); 
-                        setLoading(false); 
-                    });
+                    .catch(err => { setError(err.message); setLoading(false); });
             }, []);
 
             const categories = ["Tout", ...new Set(items.map(i => i.Categorie).filter(Boolean))];
             const filtered = filter === "Tout" ? items : items.filter(i => i.Categorie === filter);
 
             if (loading) return <div style={{padding:"100px", textAlign:"center"}}>Chargement...</div>;
-            if (error)   return <div style={{padding:"100px", textAlign:"center", color:"red"}}>Erreur : {error}</div>;
 
             return (
                 <div>
                     <header>
-                        <div className="logo-wrapper">
-                            <div style={{color:'white', fontWeight:'bold', fontSize:'20px'}}>RECYCL'EN GARE</div>
-                        </div>
+                        <div style={{color:'white', fontWeight:'bold', fontSize:'24px', fontFamily:'Georgia, serif'}}>RECYCL'EN GARE</div>
                     </header>
 
                     <div className="nav-cats">
@@ -167,8 +134,11 @@
                             <div key={idx} className="card" onClick={() => setSelected(item)}>
                                 <img className="card-img" src={item._photoUrl} alt={item.Titre} />
                                 <div className="card-content">
-                                    <div style={{fontSize:'12px', color:'var(--muted)'}}>{item.Categorie}</div>
-                                    <h3 style={{margin:'5px 0'}}>{item.Titre}</h3>
+                                    <div style={{display:'flex', justifyContent:'space-between', marginBottom:'5px'}}>
+                                        <span style={{fontSize:'11px', color:'var(--muted)', fontWeight:'bold'}}>{item.Categorie}</span>
+                                        <span style={{fontSize:'10px', color:'var(--muted)'}}>{item.DateCreation}</span>
+                                    </div>
+                                    <h3 style={{margin:'0', fontSize:'1.1rem'}}>{item.Titre}</h3>
                                     <div className="price">{item.Prix ? `${item.Prix} €` : "Prix libre"}</div>
                                 </div>
                             </div>
@@ -179,13 +149,20 @@
                         <div className="modal-overlay" onClick={() => setSelected(null)}>
                             <div className="modal" onClick={e => e.stopPropagation()}>
                                 <button className="close-btn" onClick={() => setSelected(null)}>&times;</button>
-                                <img style={{width:'100%', height:'300px', objectFit:'cover'}} src={selected._photoUrl} />
+                                <img style={{width:'100%', maxHeight:'400px', objectFit:'contain', background:'#f9f9f9'}} src={selected._photoUrl} />
                                 <div style={{padding:'30px'}}>
-                                    <div style={{fontSize:'12px', color:'var(--muted)'}}>{selected.Categorie}</div>
-                                    <h2>{selected.Titre}</h2>
-                                    <p style={{whiteSpace:'pre-wrap'}}>{selected.Description}</p>
-                                    {selected.Dimensions && <p><strong>Dimensions :</strong> {selected.Dimensions}</p>}
-                                    <div className="price" style={{fontSize:'2rem', borderTop:'1px solid #eee', paddingTop:'20px'}}>
+                                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px'}}>
+                                        <span style={{fontSize:'12px', color:'var(--muted)', fontWeight:'bold'}}>{selected.Categorie}</span>
+                                        <span style={{fontSize:'12px', color:'var(--muted)'}}>Ajouté le : {selected.DateCreation}</span>
+                                    </div>
+                                    <h2 style={{margin:'0 0 15px', fontFamily:'Georgia, serif'}}>{selected.Titre}</h2>
+                                    <p style={{whiteSpace:'pre-wrap', lineHeight:'1.6', color:'#444'}}>{selected.Description}</p>
+                                    {selected.Dimensions && (
+                                        <p style={{background:'#f5f5f5', padding:'10px', borderRadius:'8px', fontSize:'14px'}}>
+                                            <strong>Dimensions :</strong> {selected.Dimensions}
+                                        </p>
+                                    )}
+                                    <div className="price" style={{fontSize:'2.2rem', borderTop:'2px solid var(--cream-dark)', paddingTop:'20px', marginTop:'20px'}}>
                                         {selected.Prix ? `${selected.Prix} €` : "Prix libre"}
                                     </div>
                                 </div>
@@ -194,7 +171,7 @@
                     )}
 
                     <footer>
-                        <p>© 2024 Recycl'en Gare - Vermenton</p>
+                        <p>© 2026 Recycl'en Gare - Vermenton</p>
                     </footer>
                 </div>
             );
