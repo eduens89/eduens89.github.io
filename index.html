@@ -36,7 +36,7 @@
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; padding: 2rem; max-width: 1200px; margin: 0 auto; min-height: 50vh; }
         .card { background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(33,13,65,0.12); transition: 0.3s; cursor: pointer; border: 1px solid rgba(33,13,65,0.05); }
         .card:hover { transform: translateY(-8px); box-shadow: 0 15px 35px rgba(33,13,65,0.2); }
-        .card-img { height: 210px; width: 100%; object-fit: cover; background: #eee; }
+        .card-img { height: 210px; width: 100%; object-fit: contain; background: var(--purple); }
         .card-content { padding: 20px; }
         .price { font-size: 1.4rem; font-weight: 800; color: var(--purple); }
         .item-date { font-size: 11px; color: var(--muted); }
@@ -305,7 +305,7 @@
                         <div className="modal-overlay" onClick={() => setSelected(null)}>
                             <div className="modal" onClick={e => e.stopPropagation()}>
                                 <button className="close-btn" onClick={() => setSelected(null)}>×</button>
-                                <img src={selected.Photos?.[0]?.url} style={{width:'100%', height:'400px', objectFit:'cover'}} />
+                                <img src={selected.Photos?.[0]?.url} style={{width:'100%', height:'auto', maxHeight:'60vh', objectFit:'contain', background:'var(--purple)'}} />
                                 <div style={{padding: '30px'}}>
                                     <h2 style={{fontFamily: 'Georgia, serif', fontSize: '2rem', margin: '0 0 10px'}}>{selected.Titre}</h2>
                                     <p style={{lineHeight: '1.6'}}>{selected.Description}</p>
