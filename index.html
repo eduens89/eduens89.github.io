@@ -59,9 +59,13 @@
 
         .modal-overlay { position: fixed; inset: 0; background: rgba(33,13,65,0.85); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; backdrop-filter: blur(4px); }
         .modal { background: white; border-radius: 24px; max-width: 550px; width: 100%; max-height: 90vh; overflow-y: auto; position: relative; }
-        .close-btn { position: absolute; top: 15px; right: 15px; background: white; border-radius: 50%; border: none; font-size: 24px; cursor: pointer; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        .close-btn { position: absolute; top: 15px; right: 15px; background: white; border-radius: 50%; border: none; font-size: 24px; cursor: pointer; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 10; }
+        
+        /* Cacher la barre de défilement pour les vignettes */
+        .thumbnails-container::-webkit-scrollbar { display: none; }
+        .thumbnails-container { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
-	
+    
 </head>
 <body>
     <div id="root"></div>
@@ -69,10 +73,7 @@
     const { useState, useEffect } = React;
     
     // --- NOUVEAUX LIENS GOOGLE (MODIFIÉS POUR FORCER L'ACTUALISATION) ---
-    // On crée un code unique basé sur l'heure (ex: 1712850000)
     const rafraichissement = new Date().getTime();
-
-    // On ajoute ce code aux liens pour que le navigateur ne puisse pas utiliser le cache
     const SHEET_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vREXXW0wE12HS6P_2zK--2Rmmo9B6mTOjfecrdJHoR4xkwHYbtCqJCDvw0FbQMH7JrDNnF_-7msa_i7/pub?gid=0&single=true&output=csv" + "&t=" + rafraichissement;
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwv8ygZBVSv1BZ-Xn0ymoYfLkADkClhAnnlBttLp_xy2eoiBisDaV01uXJjl6sCNvIWhQ/exec" + "?t=" + rafraichissement;
 
@@ -83,242 +84,277 @@
         if (val.startsWith("http") && !val.includes("drive.google.com")) return val;
         if (val.includes("drive.google.com")) {
             const parts = val.match(/\/d\/([^\/]+)/) || val.match(/id=([^&]+)/);
-            if (parts && parts[1]) return `https://drive.google.com/thumbnail?id=${parts[1]}&sz=w600`;
+            if (parts && parts[1]) return `https://drive.google.com/thumbnail?id=${parts[1]}&sz=w800`;
         }
-        return `https://drive.google.com/thumbnail?id=${val}&sz=w600`;
+        return `https://drive.google.com/thumbnail?id=${val}&sz=w800`;
     }
 
-        function parseCSV(text) {
-            const rows = [];
-            let currentRow = [];
-            let currentCell = "";
-            let inQuotes = false;
-            for (let i = 0; i < text.length; i++) {
-                const char = text[i];
-                const nextChar = text[i + 1];
-                if (char === '"') {
-                    if (inQuotes && nextChar === '"') { currentCell += '"'; i++; } 
-                    else { inQuotes = !inQuotes; }
-                } else if (char === ',' && !inQuotes) {
-                    currentRow.push(currentCell.trim());
-                    currentCell = "";
-                } else if ((char === '\n' || char === '\r') && !inQuotes) {
-                    if (char === '\r' && nextChar === '\n') i++; 
-                    if (currentCell !== "" || currentRow.length > 0) {
-                        currentRow.push(currentCell.trim());
-                        rows.push(currentRow);
-                        currentRow = [];
-                        currentCell = "";
-                    }
-                } else { currentCell += char; }
-            }
-            if (currentRow.length > 0 || currentCell !== "") {
+    function parseCSV(text) {
+        const rows = [];
+        let currentRow = [];
+        let currentCell = "";
+        let inQuotes = false;
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            const nextChar = text[i + 1];
+            if (char === '"') {
+                if (inQuotes && nextChar === '"') { currentCell += '"'; i++; } 
+                else { inQuotes = !inQuotes; }
+            } else if (char === ',' && !inQuotes) {
                 currentRow.push(currentCell.trim());
-                rows.push(currentRow);
-            }
-            if (rows.length < 2) return [];
-            const headers = rows[0].map(h => h.replace(/^\ufeff/, "").replace(/^"|"$/g, "").trim());
+                currentCell = "";
+            } else if ((char === '\n' || char === '\r') && !inQuotes) {
+                if (char === '\r' && nextChar === '\n') i++; 
+                if (currentCell !== "" || currentRow.length > 0) {
+                    currentRow.push(currentCell.trim());
+                    rows.push(currentRow);
+                    currentRow = [];
+                    currentCell = "";
+                }
+            } else { currentCell += char; }
+        }
+        if (currentRow.length > 0 || currentCell !== "") {
+            currentRow.push(currentCell.trim());
+            rows.push(currentRow);
+        }
+        if (rows.length < 2) return [];
+        const headers = rows[0].map(h => h.replace(/^\ufeff/, "").replace(/^"|"$/g, "").trim());
+        
+        return rows.slice(1).map((row, idx) => {
+            const obj = { _row: idx + 2 };
+            headers.forEach((h, i) => {
+                obj[h] = (row[i] || "").replace(/^"|"$/g, "").trim();
+            });
             
-            return rows.slice(1).map((row, idx) => {
-                const obj = { _row: idx + 2 };
-                headers.forEach((h, i) => {
-                    obj[h] = (row[i] || "").replace(/^"|"$/g, "").trim();
+            // --- NOUVEAU : DECOUPAGE DES PHOTOS MULTIPLES ---
+            const photosString = obj["Photos"] || "";
+            // On sépare par les virgules
+            const photoIds = photosString.split(',').map(s => s.trim().replace(/^"|"$/g, "")).filter(Boolean);
+            
+            if (photoIds.length > 0) {
+                obj.Photos = photoIds.map(id => ({ url: getPhotoUrl(id) }));
+            } else {
+                obj.Photos = [{ url: "https://placehold.co/400x300?text=Photo+à+venir" }];
+            }
+            
+            obj.DateCreation = obj["DateCreation"] || obj["Date"] || obj["date"] || "";
+            
+            return obj;
+        }).filter(o => o["Titre"]);
+    }
+
+    function App() {
+        const [items, setItems] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [filter, setFilter] = useState("Tout");
+        const [selected, setSelected] = useState(null);
+        
+        // --- NOUVEAU : GESTION DE L'IMAGE ACTIVE DANS LA MODAL ---
+        const [activePhotoIdx, setActivePhotoIdx] = useState(0);
+
+        // --- ETATS ADMIN ---
+        const [adminPassword, setAdminPassword] = useState("");
+        const [deletingId, setDeletingId] = useState(null);
+
+        const loadData = () => {
+            fetch(SHEET_CSV)
+                .then(res => res.text())
+                .then(text => { 
+                    let data = parseCSV(text);
+                    setItems(data.reverse()); 
+                    setLoading(false); 
+                })
+                .catch(err => setLoading(false));
+        };
+
+        useEffect(() => {
+            loadData();
+        }, []);
+
+        // --- LOGIQUE SUPPRESSION ---
+        const handleAdminToggle = () => {
+            if (adminPassword) {
+                setAdminPassword("");
+            } else {
+                const pwd = window.prompt("🔑 Entrez le mot de passe administrateur :");
+                if (pwd) setAdminPassword(pwd);
+            }
+        };
+
+        const handleDelete = async (e, item) => {
+            e.stopPropagation(); 
+            if (!window.confirm(`⚠️ Attention : Voulez-vous vraiment supprimer "${item.Titre}" ?`)) return;
+
+            setDeletingId(item._row);
+
+            try {
+                const response = await fetch(SCRIPT_URL, {
+                    method: "POST",
+                    body: JSON.stringify({ action: "delete", row: item._row, password: adminPassword })
                 });
-                
-                // Mappage Airtable pour que ton design marche tout seul
-                const imageUrl = getPhotoUrl(obj["Photos"] || "");
-                obj.Photos = [{ url: imageUrl }]; 
-                obj.DateCreation = obj["DateCreation"] || obj["Date"] || obj["date"] || "";
-                
-                return obj;
-            }).filter(o => o["Titre"]);
-        }
+                const result = await response.json();
 
-        function App() {
-            const [items, setItems] = useState([]);
-            const [loading, setLoading] = useState(true);
-            const [filter, setFilter] = useState("Tout");
-            const [selected, setSelected] = useState(null);
-
-            // --- ETATS ADMIN ---
-            const [adminPassword, setAdminPassword] = useState("");
-            const [deletingId, setDeletingId] = useState(null);
-
-            const loadData = () => {
-                fetch(SHEET_CSV)
-                    .then(res => res.text())
-                    .then(text => { 
-                        let data = parseCSV(text);
-                        setItems(data.reverse()); 
-                        setLoading(false); 
-                    })
-                    .catch(err => setLoading(false));
-            };
-
-            useEffect(() => {
-                loadData();
-            }, []);
-
-            // --- LOGIQUE SUPPRESSION ---
-            const handleAdminToggle = () => {
-                if (adminPassword) {
-                    setAdminPassword("");
+                if (result.status === "success") {
+                    setItems(prevItems => prevItems.filter(i => i._row !== item._row));
+                    alert("✅ L'article a été supprimé !");
+                    loadData(); 
                 } else {
-                    const pwd = window.prompt("🔑 Entrez le mot de passe administrateur :");
-                    if (pwd) setAdminPassword(pwd);
+                    alert("❌ Erreur : " + (result.message || "Mot de passe incorrect ?"));
+                    if (result.message === "Mot de passe incorrect !") setAdminPassword("");
                 }
-            };
+            } catch (err) {
+                alert("❌ Erreur réseau.");
+            }
+            setDeletingId(null);
+        };
 
-            const handleDelete = async (e, item) => {
-                e.stopPropagation(); 
-                if (!window.confirm(`⚠️ Attention : Voulez-vous vraiment supprimer "${item.Titre}" ?`)) return;
+        const categories = ["Tout", ...new Set(items.map(i => i.Categorie).filter(Boolean))];
+        const filtered = filter === "Tout" ? items : items.filter(i => i.Categorie === filter);
 
-                setDeletingId(item._row);
+        const formatDate = (dateStr) => {
+            if (!dateStr) return "";
+            return new Date(dateStr).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
+        };
 
-                try {
-                    const response = await fetch(SCRIPT_URL, {
-                        method: "POST",
-                        body: JSON.stringify({ action: "delete", row: item._row, password: adminPassword })
-                    });
-                    const result = await response.json();
+        if (loading) return <div style={{padding: "100px", textAlign: "center", color: "var(--purple)"}}>Chargement du catalogue...</div>;
 
-                    if (result.status === "success") {
-                        setItems(prevItems => prevItems.filter(i => i._row !== item._row));
-                        alert("✅ L'article a été supprimé !");
-                        loadData(); 
-                    } else {
-                        alert("❌ Erreur : " + (result.message || "Mot de passe incorrect ?"));
-                        if (result.message === "Mot de passe incorrect !") setAdminPassword("");
-                    }
-                } catch (err) {
-                    alert("❌ Erreur réseau.");
-                }
-                setDeletingId(null);
-            };
-
-            const categories = ["Tout", ...new Set(items.map(i => i.Categorie).filter(Boolean))];
-            const filtered = filter === "Tout" ? items : items.filter(i => i.Categorie === filter);
-
-            const formatDate = (dateStr) => {
-                if (!dateStr) return "";
-                return new Date(dateStr).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
-            };
-
-            if (loading) return <div style={{padding: "100px", textAlign: "center", color: "var(--purple)"}}>Chargement du catalogue...</div>;
-
-            return (
-                <div>
-                    <header>
-                        <div className="logo-wrapper">
-                            <img className="logo-img" src="logo.png" />
-</div>
+        return (
+            <div>
+                <header>
+                    <div className="logo-wrapper">
+                        <img className="logo-img" src="logo.png" />
+                    </div>
                     <button onClick={handleAdminToggle} style={{background: 'transparent', border: 'none', fontSize: '24px', cursor: 'pointer', marginLeft: 'auto', zIndex: 100}}>
-    {adminPassword ? '🔓' : '🔒'}
-</button></header>
-                    
-                    <div className="info-banner">
-                        <div className="info-banner-text">
-                            <strong>Retrouvez notre catalogue de mobiliers et puériculture !</strong>
-                            <span>Si un élément vous intéresse, il suffit de nous le demander en caisse lors de votre passage à la boutique et nous irons vous le chercher dans notre stockage !</span>
-                            <span className="info-banner-warning">⚠️ Nous ne prenons cependant aucune réservation en ligne (pour des questions logistiques et de temps), merci de votre compréhension. ⚠️</span>
-                        </div>
+                        {adminPassword ? '🔓' : '🔒'}
+                    </button>
+                </header>
+                
+                <div className="info-banner">
+                    <div className="info-banner-text">
+                        <strong>Retrouvez notre catalogue de mobiliers et puériculture !</strong>
+                        <span>Si un élément vous intéresse, il suffit de nous le demander en caisse lors de votre passage à la boutique et nous irons vous le chercher dans notre stockage !</span>
+                        <span className="info-banner-warning">⚠️ Nous ne prenons cependant aucune réservation en ligne (pour des questions logistiques et de temps), merci de votre compréhension. ⚠️</span>
                     </div>
-
-                    <div className="nav-cats">
-                        {categories.map(c => {
-                            const count = c === "Tout" ? items.length : items.filter(i => i.Categorie === c).length;
-                            return (
-                                <button key={c} className={filter === c ? 'active' : ''} onClick={() => setFilter(c)}>
-                                    {c} <span className="count-badge">{count}</span>
-                                </button>
-                            );
-                        })}
-                    </div>
-
-                    <main className="grid">
-                        {filtered.map((item, index) => (
-                            <div key={item._row || index} className="card" onClick={() => setSelected(item)} style={{position: 'relative'}}>
-                                
-                                {/* --- BOUTON POUBELLE --- */}
-                                {adminPassword && (
-                                    <button 
-                                        onClick={(e) => handleDelete(e, item)} 
-                                        disabled={deletingId === item._row} 
-                                        style={{position: 'absolute', top: '10px', right: '10px', background: '#d32f2f', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', zIndex: 10, fontWeight: 'bold'}}
-                                    >
-                                        {deletingId === item._row ? '⏳...' : '🗑️ Supprimer'}
-                                    </button>
-                                )}
-                                {/* ----------------------- */}
-
-                                <img className="card-img" src={item.Photos?.[0]?.url || 'https://via.placeholder.com/400x300?text=Photo+à+venir'} />
-                                <div className="card-content">
-                                    <div style={{fontSize: '11px', color: 'var(--muted)', fontWeight: 'bold'}}>{item.Categorie}</div>
-                                    <div style={{fontWeight: '700', fontSize: '1.2rem', margin: '8px 0'}}>{item.Titre}</div>
-                                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: '10px'}}>
-                                        <div className="price">{item.Prix ? `${item.Prix} €` : "Prix libre"}</div>
-                                        <div className="item-date">{formatDate(item.DateCreation)}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </main>
-
-                    {/* PIED DE PAGE AVEC INFOS image_004f4b.png */}
-                    <footer>
-                        <div className="footer-grid">
-                            <div className="footer-col">
-                                <div className="footer-title">Nous trouver</div>
-                                <p style={{fontWeight: 'bold', fontSize: '1.1rem'}}>Recycl'en Gare</p>
-                                <p>21 avenue de la gare<br/>89270 Vermenton</p>
-                                <p style={{marginTop: '20px'}}><span className="day">Email :</span> contact@recyclengare.org</p>
-                                <p><span className="day">Tél :</span> 07 44 98 27 20</p>
-                            </div>
-
-                            <div className="footer-col">
-                                <div className="footer-title">Horaires d'ouvertures</div>
-                                <ul className="hours-list">
-                                    <li><span><span className="day">Mercredi</span> 9h30 - 12h30 et 15h30 - 18h30</span></li>
-                                    <li><span><span className="day">Vendredi</span> 9h30 - 12h30</span></li>
-                                    <li><span><span className="day">Samedi</span> 9h30 - 12h30 et 15h30 - 18h30</span></li>
-                                </ul>
-                                
-                                <div className="footer-title" style={{marginTop: '25px'}}>Horaires dépôts</div>
-                                <ul className="hours-list">
-                                    <li><span><span className="day">Mercredi</span> 9h30 - 12h30</span></li>
-                                    <li><span><span className="day">Samedi</span> 15h30 - 18h30</span></li>
-                                </ul>
-                            </div>
-
-                            <div className="footer-col" style={{display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center'}}>
-                                <div style={{opacity: 0.6, fontSize: '12px', textAlign: 'center'}}>
-                                    <p>Soutenu par la commune de Vermenton et la Région Bourgogne Franche-Comté</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div style={{textAlign: 'center', marginTop: '3rem', opacity: 0.4, fontSize: '11px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px'}}>
-                            © 2026 Recycl'en Gare - Association Loi 1901
-                        </div>
-                    </footer>
-
-                    {selected && (
-                        <div className="modal-overlay" onClick={() => setSelected(null)}>
-                            <div className="modal" onClick={e => e.stopPropagation()}>
-                                <button className="close-btn" onClick={() => setSelected(null)}>×</button>
-                                <img src={selected.Photos?.[0]?.url} style={{width:'100%', height:'auto', maxHeight:'60vh', objectFit:'contain', background:'var(--purple)'}} />
-                                <div style={{padding: '30px'}}>
-                                    <h2 style={{fontFamily: 'Georgia, serif', fontSize: '2rem', margin: '0 0 10px'}}>{selected.Titre}</h2>
-                                    <p style={{lineHeight: '1.6'}}>{selected.Description}</p>
-                                    <div className="price" style={{fontSize: '2rem', borderTop: '1px solid #eee', paddingTop: '20px'}}>{selected.Prix ? `${selected.Prix} €` : "Prix libre"}</div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
                 </div>
-            );
-        }
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
+
+                <div className="nav-cats">
+                    {categories.map(c => {
+                        const count = c === "Tout" ? items.length : items.filter(i => i.Categorie === c).length;
+                        return (
+                            <button key={c} className={filter === c ? 'active' : ''} onClick={() => setFilter(c)}>
+                                {c} <span className="count-badge">{count}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+
+                <main className="grid">
+                    {filtered.map((item, index) => (
+                        // NOUVEAU : On remet à 0 l'index de la photo quand on clique sur une carte
+                        <div key={item._row || index} className="card" onClick={() => { setSelected(item); setActivePhotoIdx(0); }} style={{position: 'relative'}}>
+                            
+                            {/* --- BOUTON POUBELLE --- */}
+                            {adminPassword && (
+                                <button 
+                                    onClick={(e) => handleDelete(e, item)} 
+                                    disabled={deletingId === item._row} 
+                                    style={{position: 'absolute', top: '10px', right: '10px', background: '#d32f2f', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', zIndex: 10, fontWeight: 'bold'}}
+                                >
+                                    {deletingId === item._row ? '⏳...' : '🗑️ Supprimer'}
+                                </button>
+                            )}
+                            {/* ----------------------- */}
+
+                            <img className="card-img" src={item.Photos?.[0]?.url || 'https://via.placeholder.com/400x300?text=Photo+à+venir'} />
+                            <div className="card-content">
+                                <div style={{fontSize: '11px', color: 'var(--muted)', fontWeight: 'bold'}}>{item.Categorie}</div>
+                                <div style={{fontWeight: '700', fontSize: '1.2rem', margin: '8px 0'}}>{item.Titre}</div>
+                                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: '10px'}}>
+                                    <div className="price">{item.Prix ? `${item.Prix} €` : "Prix libre"}</div>
+                                    <div className="item-date">{formatDate(item.DateCreation)}</div>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </main>
+
+                <footer>
+                    <div className="footer-grid">
+                        <div className="footer-col">
+                            <div className="footer-title">Nous trouver</div>
+                            <p style={{fontWeight: 'bold', fontSize: '1.1rem'}}>Recycl'en Gare</p>
+                            <p>21 avenue de la gare<br/>89270 Vermenton</p>
+                            <p style={{marginTop: '20px'}}><span className="day">Email :</span> contact@recyclengare.org</p>
+                            <p><span className="day">Tél :</span> 07 44 98 27 20</p>
+                        </div>
+
+                        <div className="footer-col">
+                            <div className="footer-title">Horaires d'ouvertures</div>
+                            <ul className="hours-list">
+                                <li><span><span className="day">Mercredi</span> 9h30 - 12h30 et 15h30 - 18h30</span></li>
+                                <li><span><span className="day">Vendredi</span> 9h30 - 12h30</span></li>
+                                <li><span><span className="day">Samedi</span> 9h30 - 12h30 et 15h30 - 18h30</span></li>
+                            </ul>
+                            
+                            <div className="footer-title" style={{marginTop: '25px'}}>Horaires dépôts</div>
+                            <ul className="hours-list">
+                                <li><span><span className="day">Mercredi</span> 9h30 - 12h30</span></li>
+                                <li><span><span className="day">Samedi</span> 15h30 - 18h30</span></li>
+                            </ul>
+                        </div>
+
+                        <div className="footer-col" style={{display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center'}}>
+                            <div style={{opacity: 0.6, fontSize: '12px', textAlign: 'center'}}>
+                                <p>Soutenu par la commune de Vermenton et la Région Bourgogne Franche-Comté</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div style={{textAlign: 'center', marginTop: '3rem', opacity: 0.4, fontSize: '11px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '20px'}}>
+                        © 2026 Recycl'en Gare - Association Loi 1901
+                    </div>
+                </footer>
+
+                {selected && (
+                    <div className="modal-overlay" onClick={() => setSelected(null)}>
+                        <div className="modal" onClick={e => e.stopPropagation()}>
+                            <button className="close-btn" onClick={() => setSelected(null)}>×</button>
+                            
+                            {/* NOUVEAU : Image principale (qui change selon la miniature cliquée) */}
+                            <div style={{ background: 'var(--purple)', position: 'relative' }}>
+                                <img src={selected.Photos?.[activePhotoIdx]?.url} style={{width:'100%', height:'auto', maxHeight:'50vh', objectFit:'contain', display: 'block'}} />
+                            </div>
+
+                            {/* NOUVEAU : Les miniatures (Visibles uniquement s'il y a plus de 1 photo) */}
+                            {selected.Photos && selected.Photos.length > 1 && (
+                                <div className="thumbnails-container" style={{display: 'flex', gap: '10px', padding: '15px 30px 0', overflowX: 'auto'}}>
+                                    {selected.Photos.map((photo, idx) => (
+                                        <img 
+                                            key={idx} 
+                                            src={photo.url} 
+                                            onClick={() => setActivePhotoIdx(idx)}
+                                            style={{
+                                                width: '60px', height: '60px', objectFit: 'cover', borderRadius: '8px', cursor: 'pointer', transition: '0.2s', flexShrink: 0,
+                                                border: activePhotoIdx === idx ? '3px solid var(--green)' : '3px solid transparent',
+                                                opacity: activePhotoIdx === idx ? 1 : 0.6
+                                            }}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+
+                            <div style={{padding: '30px'}}>
+                                <h2 style={{fontFamily: 'Georgia, serif', fontSize: '2rem', margin: '0 0 10px'}}>{selected.Titre}</h2>
+                                <p style={{lineHeight: '1.6'}}>{selected.Description}</p>
+                                <div className="price" style={{fontSize: '2rem', borderTop: '1px solid #eee', paddingTop: '20px'}}>{selected.Prix ? `${selected.Prix} €` : "Prix libre"}</div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+</script>
 </body>
 </html>
