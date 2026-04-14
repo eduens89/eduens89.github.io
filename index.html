@@ -63,7 +63,6 @@
         .thumbnails-container::-webkit-scrollbar { display: none; }
         .thumbnails-container { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* Bouton de partage */
         .share-btn { background: var(--green); color: var(--purple); border: none; padding: 10px 20px; border-radius: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s; font-size: 14px; }
         .share-btn:hover { background: #8fba98; transform: translateY(-2px); }
     </style>
@@ -87,6 +86,18 @@
             if (parts && parts[1]) return `https://drive.google.com/thumbnail?id=${parts[1]}&sz=w800`;
         }
         return `https://drive.google.com/thumbnail?id=${val}&sz=w800`;
+    }
+
+    // --- NOUVEAU : Fonction pour générer le titre propre pour l'URL ---
+    function generateSlug(text) {
+        if (!text) return "";
+        return text.toString().toLowerCase()
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Enlève les accents
+            .replace(/\s+/g, '-')           // Remplace les espaces par des tirets
+            .replace(/[^\w\-]+/g, '')       // Enlève la ponctuation
+            .replace(/\-\-+/g, '-')         // Evite les doubles tirets
+            .replace(/^-+/, '')             // Enlève tiret au début
+            .replace(/-+$/, '');            // Enlève tiret à la fin
     }
 
     function parseCSV(text) {
@@ -159,10 +170,11 @@
                     setItems(data.reverse()); 
                     setLoading(false); 
                     
-                    // --- NOUVEAU : Lecture de l'URL pour ouvrir un article précis ---
+                    // --- MODIFIÉ : Récupère uniquement l'ID avant le tiret ---
                     const urlParams = new URLSearchParams(window.location.search);
-                    const itemId = urlParams.get('item');
-                    if (itemId) {
+                    const itemParam = urlParams.get('item');
+                    if (itemParam) {
+                        const itemId = itemParam.split('-')[0]; // On garde que les chiffres avant le premier tiret
                         const itemToOpen = data.find(i => i._row.toString() === itemId);
                         if (itemToOpen) {
                             setSelected(itemToOpen);
@@ -176,11 +188,10 @@
         useEffect(() => {
             loadData();
             
-            // Gérer le cas où l'utilisateur clique sur "Précédent" dans son navigateur
             window.onpopstate = () => {
                 const urlParams = new URLSearchParams(window.location.search);
-                const itemId = urlParams.get('item');
-                if (!itemId) {
+                const itemParam = urlParams.get('item');
+                if (!itemParam) {
                     setSelected(null);
                 }
             };
@@ -211,7 +222,6 @@
                 if (result.status === "success") {
                     setItems(prevItems => prevItems.filter(i => i._row !== item._row));
                     alert("✅ L'article a été supprimé !");
-                    // Si on supprime l'article ouvert, on ferme la fenêtre
                     if (selected && selected._row === item._row) {
                         closeModal();
                     }
@@ -226,11 +236,12 @@
             setDeletingId(null);
         };
         
-        // --- NOUVEAU : Fonctions d'ouverture et de fermeture avec mise à jour URL ---
+        // --- MODIFIÉ : Ajout du titre (slug) dans l'URL ---
         const openModal = (item) => {
             setSelected(item);
             setActivePhotoIdx(0);
-            window.history.pushState({}, '', '?item=' + item._row);
+            const slug = generateSlug(item.Titre);
+            window.history.pushState({}, '', '?item=' + item._row + '-' + slug);
         };
 
         const closeModal = () => {
@@ -376,7 +387,7 @@
                             )}
 
                             <div style={{padding: '30px'}}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px', marginBottom: '10px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px', margin: '0 0 10px' }}>
                                     <h2 style={{fontFamily: 'Georgia, serif', fontSize: '2rem', margin: '0'}}>{selected.Titre}</h2>
                                     <button onClick={copyToClipboard} className="share-btn" title="Copier le lien direct vers cet article">
                                         🔗 Partager
