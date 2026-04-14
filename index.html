@@ -41,7 +41,6 @@
         .price { font-size: 1.4rem; font-weight: 800; color: var(--purple); }
         .item-date { font-size: 11px; color: var(--muted); }
 
-        /* Styles du Nouveau Pied de Page (Footer) */
         footer { background: var(--purple); color: #fdf9ee; padding: 4rem 2rem; margin-top: 4rem; border-top: 4px solid var(--green); }
         .footer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 40px; max-width: 1200px; margin: 0 auto; }
         .footer-title { font-family: Georgia, serif; color: var(--green); font-size: 1.2rem; margin-bottom: 1.2rem; font-weight: bold; border-bottom: 1px solid rgba(162, 200, 171, 0.3); padding-bottom: 8px; display: inline-block; }
@@ -61,9 +60,12 @@
         .modal { background: white; border-radius: 24px; max-width: 550px; width: 100%; max-height: 90vh; overflow-y: auto; position: relative; }
         .close-btn { position: absolute; top: 15px; right: 15px; background: white; border-radius: 50%; border: none; font-size: 24px; cursor: pointer; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 10; }
         
-        /* Cacher la barre de défilement pour les vignettes */
         .thumbnails-container::-webkit-scrollbar { display: none; }
         .thumbnails-container { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Bouton de partage */
+        .share-btn { background: var(--green); color: var(--purple); border: none; padding: 10px 20px; border-radius: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s; font-size: 14px; }
+        .share-btn:hover { background: #8fba98; transform: translateY(-2px); }
     </style>
     
 </head>
@@ -72,12 +74,10 @@
 <script type="text/babel">
     const { useState, useEffect } = React;
     
-    // --- NOUVEAUX LIENS GOOGLE (MODIFIÉS POUR FORCER L'ACTUALISATION) ---
     const rafraichissement = new Date().getTime();
     const SHEET_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vREXXW0wE12HS6P_2zK--2Rmmo9B6mTOjfecrdJHoR4xkwHYbtCqJCDvw0FbQMH7JrDNnF_-7msa_i7/pub?gid=0&single=true&output=csv" + "&t=" + rafraichissement;
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwv8ygZBVSv1BZ-Xn0ymoYfLkADkClhAnnlBttLp_xy2eoiBisDaV01uXJjl6sCNvIWhQ/exec" + "?t=" + rafraichissement;
 
-    // --- FONCTION DE LECTURE GOOGLE SHEETS ---
     function getPhotoUrl(val) {
         if (!val) return "https://placehold.co/400x300?text=Photo+à+venir";
         val = val.trim().replace(/^"|"$/g, ""); 
@@ -126,9 +126,7 @@
                 obj[h] = (row[i] || "").replace(/^"|"$/g, "").trim();
             });
             
-            // --- NOUVEAU : DECOUPAGE DES PHOTOS MULTIPLES ---
             const photosString = obj["Photos"] || "";
-            // On sépare par les virgules
             const photoIds = photosString.split(',').map(s => s.trim().replace(/^"|"$/g, "")).filter(Boolean);
             
             if (photoIds.length > 0) {
@@ -148,11 +146,8 @@
         const [loading, setLoading] = useState(true);
         const [filter, setFilter] = useState("Tout");
         const [selected, setSelected] = useState(null);
-        
-        // --- NOUVEAU : GESTION DE L'IMAGE ACTIVE DANS LA MODAL ---
         const [activePhotoIdx, setActivePhotoIdx] = useState(0);
 
-        // --- ETATS ADMIN ---
         const [adminPassword, setAdminPassword] = useState("");
         const [deletingId, setDeletingId] = useState(null);
 
@@ -163,15 +158,34 @@
                     let data = parseCSV(text);
                     setItems(data.reverse()); 
                     setLoading(false); 
+                    
+                    // --- NOUVEAU : Lecture de l'URL pour ouvrir un article précis ---
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const itemId = urlParams.get('item');
+                    if (itemId) {
+                        const itemToOpen = data.find(i => i._row.toString() === itemId);
+                        if (itemToOpen) {
+                            setSelected(itemToOpen);
+                            setActivePhotoIdx(0);
+                        }
+                    }
                 })
                 .catch(err => setLoading(false));
         };
 
         useEffect(() => {
             loadData();
+            
+            // Gérer le cas où l'utilisateur clique sur "Précédent" dans son navigateur
+            window.onpopstate = () => {
+                const urlParams = new URLSearchParams(window.location.search);
+                const itemId = urlParams.get('item');
+                if (!itemId) {
+                    setSelected(null);
+                }
+            };
         }, []);
 
-        // --- LOGIQUE SUPPRESSION ---
         const handleAdminToggle = () => {
             if (adminPassword) {
                 setAdminPassword("");
@@ -197,6 +211,10 @@
                 if (result.status === "success") {
                     setItems(prevItems => prevItems.filter(i => i._row !== item._row));
                     alert("✅ L'article a été supprimé !");
+                    // Si on supprime l'article ouvert, on ferme la fenêtre
+                    if (selected && selected._row === item._row) {
+                        closeModal();
+                    }
                     loadData(); 
                 } else {
                     alert("❌ Erreur : " + (result.message || "Mot de passe incorrect ?"));
@@ -206,6 +224,26 @@
                 alert("❌ Erreur réseau.");
             }
             setDeletingId(null);
+        };
+        
+        // --- NOUVEAU : Fonctions d'ouverture et de fermeture avec mise à jour URL ---
+        const openModal = (item) => {
+            setSelected(item);
+            setActivePhotoIdx(0);
+            window.history.pushState({}, '', '?item=' + item._row);
+        };
+
+        const closeModal = () => {
+            setSelected(null);
+            window.history.pushState({}, '', window.location.pathname);
+        };
+
+        const copyToClipboard = () => {
+            navigator.clipboard.writeText(window.location.href).then(() => {
+                alert("✅ Le lien direct vers cet article a été copié ! Vous pouvez le coller où vous voulez.");
+            }).catch(err => {
+                alert("❌ Impossible de copier le lien automatiquement. Vous pouvez le copier depuis la barre d'adresse.");
+            });
         };
 
         const categories = ["Tout", ...new Set(items.map(i => i.Categorie).filter(Boolean))];
@@ -250,10 +288,8 @@
 
                 <main className="grid">
                     {filtered.map((item, index) => (
-                        // NOUVEAU : On remet à 0 l'index de la photo quand on clique sur une carte
-                        <div key={item._row || index} className="card" onClick={() => { setSelected(item); setActivePhotoIdx(0); }} style={{position: 'relative'}}>
+                        <div key={item._row || index} className="card" onClick={() => openModal(item)} style={{position: 'relative'}}>
                             
-                            {/* --- BOUTON POUBELLE --- */}
                             {adminPassword && (
                                 <button 
                                     onClick={(e) => handleDelete(e, item)} 
@@ -263,7 +299,6 @@
                                     {deletingId === item._row ? '⏳...' : '🗑️ Supprimer'}
                                 </button>
                             )}
-                            {/* ----------------------- */}
 
                             <img className="card-img" src={item.Photos?.[0]?.url || 'https://via.placeholder.com/400x300?text=Photo+à+venir'} />
                             <div className="card-content">
@@ -315,16 +350,14 @@
                 </footer>
 
                 {selected && (
-                    <div className="modal-overlay" onClick={() => setSelected(null)}>
+                    <div className="modal-overlay" onClick={closeModal}>
                         <div className="modal" onClick={e => e.stopPropagation()}>
-                            <button className="close-btn" onClick={() => setSelected(null)}>×</button>
+                            <button className="close-btn" onClick={closeModal}>×</button>
                             
-                            {/* NOUVEAU : Image principale (qui change selon la miniature cliquée) */}
                             <div style={{ background: 'var(--purple)', position: 'relative' }}>
                                 <img src={selected.Photos?.[activePhotoIdx]?.url} style={{width:'100%', height:'auto', maxHeight:'50vh', objectFit:'contain', display: 'block'}} />
                             </div>
 
-                            {/* NOUVEAU : Les miniatures (Visibles uniquement s'il y a plus de 1 photo) */}
                             {selected.Photos && selected.Photos.length > 1 && (
                                 <div className="thumbnails-container" style={{display: 'flex', gap: '10px', padding: '15px 30px 0', overflowX: 'auto'}}>
                                     {selected.Photos.map((photo, idx) => (
@@ -343,7 +376,13 @@
                             )}
 
                             <div style={{padding: '30px'}}>
-                                <h2 style={{fontFamily: 'Georgia, serif', fontSize: '2rem', margin: '0 0 10px'}}>{selected.Titre}</h2>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px', marginBottom: '10px' }}>
+                                    <h2 style={{fontFamily: 'Georgia, serif', fontSize: '2rem', margin: '0'}}>{selected.Titre}</h2>
+                                    <button onClick={copyToClipboard} className="share-btn" title="Copier le lien direct vers cet article">
+                                        🔗 Partager
+                                    </button>
+                                </div>
+                                
                                 <p style={{lineHeight: '1.6'}}>{selected.Description}</p>
                                 <div className="price" style={{fontSize: '2rem', borderTop: '1px solid #eee', paddingTop: '20px'}}>{selected.Prix ? `${selected.Prix} €` : "Prix libre"}</div>
                             </div>
